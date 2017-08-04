@@ -1,0 +1,9 @@
+[package]
+name = "wkb"
+version = "0.1.0"
+authors = ["Rory McCann <rory@technomancy.org>"]
+
+[dependencies]
+geo = "*"
+byteorder = "1"
+num-traits = "0.1"
