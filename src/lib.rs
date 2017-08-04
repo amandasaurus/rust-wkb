@@ -1,3 +1,39 @@
+//! This crate provides functions to convert `rust-geo` geometry types to and from Well Known
+//! Binary format.
+//!
+//! # Examples
+//!
+//! ```rust
+//! # extern crate geo;
+//! # extern crate wkb;
+//! # fn main() {
+//! use geo::*;
+//! use wkb::*;
+//!
+//! let p: Geometry<f64> = Geometry::Point(Point::new(2., 4.));
+//! let res = geom_to_wkb(&p);
+//! assert_eq!(res, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
+//! # }
+//! ```
+//!
+//! You can also 'read' a Geometry from a `std::io::Read`:
+//!
+//! ```rust
+//! # extern crate geo;
+//! # extern crate wkb;
+//! # fn main() {
+//! use geo::*;
+//! use wkb::*;
+//!
+//! let bytes: Vec<u8> = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64];
+//! let p: Geometry<f64> = wkb_to_geom(bytes.as_slice());
+//! assert_eq!(p, Geometry::Point(Point::new(2., 4.)));
+//! # }
+//! ```
+//!
+//! Adding proper `*Ext` traits is planned.
+//!
+//!
 extern crate geo;
 extern crate byteorder;
 extern crate num_traits;
@@ -37,12 +73,14 @@ fn write_many_points<W: Write, T: Into<f64>+Float>(mp: &[Point<T>], mut out: &mu
     }
 }
 
+/// Convert a Geometry into WKB bytes.
 pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &geo::Geometry<T>) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     write_geom_to_wkb(geom, &mut result);
     result
 }
 
+/// Write a geometry to the underlying writer.
 pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, mut result: &mut W) {
     // FIXME replace type signature with Into<Geometry<T>>
     
@@ -96,6 +134,7 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
 
 }
 
+/// Read a Geometry from a reader. Converts WKB to a Geometry.
 pub fn wkb_to_geom<I: Read>(mut wkb: I) -> geo::Geometry<f64> {
     match wkb.read_u8().unwrap() {
         0 => unimplemented!(),
