@@ -128,7 +128,7 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
                 }
             }
         },
-        &Geometry::GeometryCollection(ref gc) => {
+        &Geometry::GeometryCollection(ref _gc) => {
             // FIXME implement, don't want to duplicate all the above
             unimplemented!();
         }
