@@ -2,6 +2,10 @@
 name = "wkb"
 version = "0.1.0"
 authors = ["Rory McCann <rory@technomancy.org>"]
+description = "Convert rust-geo types to/from Well Known Binary"
+keywords = ["geo"]
+repository = "https://github.com/rory/rust-wkb"
+license = "AGPL-3.0+"
 
 [dependencies]
 geo = "*"
