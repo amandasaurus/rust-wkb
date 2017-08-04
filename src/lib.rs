@@ -34,6 +34,8 @@
 //! Adding proper `*Ext` traits is planned.
 //!
 //!
+
+#![allow(unused_must_use)]
 extern crate geo;
 extern crate byteorder;
 extern crate num_traits;
