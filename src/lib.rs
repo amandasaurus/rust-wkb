@@ -111,6 +111,10 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
             result.write_u32::<LittleEndian>(2);
             write_many_points(&ls.0, &mut result);
         },
+        &Geometry::Line(ref l) => {
+            result.write_u32::<LittleEndian>(2);
+            write_many_points(&[l.start, l.end], &mut result);
+        },
         &Geometry::Polygon(ref p) => {
             result.write_u32::<LittleEndian>(3);
             result.write_u32::<LittleEndian>(1 + p.interiors.len() as u32);
