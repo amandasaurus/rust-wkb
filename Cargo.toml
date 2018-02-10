@@ -8,6 +8,6 @@ repository = "https://github.com/rory/rust-wkb"
 license = "AGPL-3.0+"
 
 [dependencies]
-geo = "0.4"
+geo = { git = "https://github.com/rory/rust-geo.git", branch = "rory-everything" }
 byteorder = "1"
 num-traits = "0.1"
