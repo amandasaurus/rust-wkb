@@ -1,6 +1,6 @@
 [package]
 name = "wkb"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Rory McCann <rory@technomancy.org>"]
 description = "Convert rust-geo types to/from Well Known Binary"
 keywords = ["geo"]
