@@ -231,12 +231,12 @@ pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<geo::Geometry<f64>, WKBRe
 mod tests {
     use super::*;
 
-    fn assert_two_f64<R: Read, I: Into<f64>>(mut reader: &mut R, a: I, b: I) {
+    fn assert_two_f64<R: Read, I: Into<f64>>(reader: &mut R, a: I, b: I) {
         assert_eq!(reader.read_f64::<LittleEndian>().unwrap(), a.into());
         assert_eq!(reader.read_f64::<LittleEndian>().unwrap(), b.into());
     }
 
-    fn write_two_f64<W: Write, F: Into<f64>>(mut writer: &mut W, a: F, b: F) {
+    fn write_two_f64<W: Write, F: Into<f64>>(writer: &mut W, a: F, b: F) {
         writer.write_f64::<LittleEndian>(a.into());
         writer.write_f64::<LittleEndian>(b.into());
     }
