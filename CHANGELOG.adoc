@@ -1,4 +1,5 @@
-== Unreleased
+== v0.3.0 
 
  * Upgraded dependencies:
    * `geo` from 0.7 to 0.10
+   * `num-traits` from 0.1 to 0.2
