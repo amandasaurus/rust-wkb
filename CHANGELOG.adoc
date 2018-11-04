@@ -1,0 +1,4 @@
+== Unreleased
+
+ * Upgraded dependencies:
+   * `geo` from 0.7 to 0.10
