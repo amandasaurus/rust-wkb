@@ -46,7 +46,7 @@ use std::io;
 use geo::*;
 use num_traits::Float;
 use byteorder::{WriteBytesExt, ReadBytesExt};
-use byteorder::{LittleEndian};
+use byteorder::{ByteOrder, BigEndian, LittleEndian};
 
 #[derive(Debug)]
 pub enum WKBReadError {
@@ -61,9 +61,9 @@ impl From<io::Error> for WKBReadError {
 }
 
 
-fn read_point<I: Read>(mut wkb: I) -> Result<Coordinate<f64>, WKBReadError> {
-    let x: f64 = wkb.read_f64::<LittleEndian>()?;
-    let y: f64 = wkb.read_f64::<LittleEndian>()?;
+fn read_point<I: Read, B: ByteOrder>(mut wkb: I) -> Result<Coordinate<f64>, WKBReadError> {
+    let x: f64 = wkb.read_f64::<B>()?;
+    let y: f64 = wkb.read_f64::<B>()?;
     Ok(Coordinate{ x, y })
 }
 
@@ -72,11 +72,11 @@ fn write_point<W: Write, T: Into<f64>+Float>(c: &Coordinate<T>, out: &mut W) {
     out.write_f64::<LittleEndian>(c.y.into());
 }
 
-fn read_many_points<I: Read>(mut wkb: I) -> Result<Vec<Coordinate<f64>>, WKBReadError> {
+fn read_many_points<I: Read, B: ByteOrder>(mut wkb: I) -> Result<Vec<Coordinate<f64>>, WKBReadError> {
     let num_points = wkb.read_u32::<LittleEndian>()? as usize;
     let mut res: Vec<Coordinate<f64>> = Vec::with_capacity(num_points);
     for _ in 0..num_points {
-        res.push(read_point(&mut wkb)?);
+        res.push(read_point::<_, B>(&mut wkb)?);
     }
 
     Ok(res)
@@ -160,41 +160,43 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
 
 }
 /// Read a Geometry from a reader. Converts WKB to a Geometry.
-pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<geo::Geometry<f64>, WKBReadError> {
+pub fn wkb_to_geom<I: Read>(wkb: &mut I) -> Result<geo::Geometry<f64>, WKBReadError> {
     match wkb.read_u8()? {
-        0 => unimplemented!(),
-        1 => { },  // LittleEndian, OK
-        _ => panic!(),
-    };
+        0 => wkb_to_geom_inner::<_, BigEndian>(wkb),
+        1 => wkb_to_geom_inner::<_, LittleEndian>(wkb),
+        _ => Err(WKBReadError::WrongType),
+    }
+}
 
-    match wkb.read_u32::<LittleEndian>()? {
+fn wkb_to_geom_inner<I: Read, B: ByteOrder>(mut wkb: &mut I) -> Result<geo::Geometry<f64>, WKBReadError> {
+    match wkb.read_u32::<B>()? {
         1 => {
             // Point
-            Ok(Geometry::Point(Point(read_point(&mut wkb)?)))
+            Ok(Geometry::Point(Point(read_point::<_, B>(&mut wkb)?)))
         },
         2 => {
             // LineString
-            let points = read_many_points(&mut wkb)?;
+            let points = read_many_points::<_, B>(&mut wkb)?;
             Ok(Geometry::LineString(LineString(points)))
         },
         3 => {
             // Polygon
-            let num_rings = wkb.read_u32::<LittleEndian>()? as usize;
-            let exterior = read_many_points(&mut wkb)?;
+            let num_rings = wkb.read_u32::<B>()? as usize;
+            let exterior = read_many_points::<_ ,B>(&mut wkb)?;
             let mut interiors = Vec::with_capacity(num_rings-1);
             for _ in 0..(num_rings-1) {
-                interiors.push(LineString(read_many_points(&mut wkb)?));
+                interiors.push(LineString(read_many_points::<_, B>(&mut wkb)?));
             }
             Ok(Geometry::Polygon(Polygon::new(LineString(exterior), interiors)))
         },
         4 => {
             // MultiPoint
-            let points = read_many_points(&mut wkb)?;
+            let points = read_many_points::<_, B>(&mut wkb)?;
             Ok(Geometry::MultiPoint(MultiPoint(points.into_iter().map(Point).collect::<Vec<Point<f64>>>())))
         },
         5 => {
             // MultiLineString
-            let num_linestrings = wkb.read_u32::<LittleEndian>()? as usize;
+            let num_linestrings = wkb.read_u32::<B>()? as usize;
             let mut linestrings = Vec::with_capacity(num_linestrings);
             for _ in 0..num_linestrings {
                 let linestring: LineString<f64> = match wkb_to_geom(wkb)? {
@@ -208,7 +210,7 @@ pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<geo::Geometry<f64>, WKBRe
         },
         6 => {
             // MultiPolygon
-            let num_polygons = wkb.read_u32::<LittleEndian>()? as usize;
+            let num_polygons = wkb.read_u32::<B>()? as usize;
             let mut polygons = Vec::with_capacity(num_polygons);
             for _ in 0..num_polygons {
                 let polygon: Polygon<f64> = match wkb_to_geom(wkb)? {
