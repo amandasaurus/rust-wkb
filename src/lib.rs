@@ -4,10 +4,10 @@
 //! # Examples
 //!
 //! ```rust
-//! # extern crate geo;
+//! # extern crate geo_types;
 //! # extern crate wkb;
 //! # fn main() {
-//! use geo::*;
+//! use geo_types::*;
 //! use wkb::*;
 //!
 //! let p: Geometry<f64> = Geometry::Point(Point::new(2., 4.));
@@ -19,10 +19,10 @@
 //! You can also 'read' a Geometry from a `std::io::Read`:
 //!
 //! ```rust
-//! # extern crate geo;
+//! # extern crate geo_types;
 //! # extern crate wkb;
 //! # fn main() {
-//! use geo::*;
+//! use geo_types::*;
 //! use wkb::*;
 //!
 //! let bytes: Vec<u8> = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64];
@@ -36,14 +36,14 @@
 //!
 
 #![allow(unused_must_use)]
-extern crate geo;
+extern crate geo_types;
 extern crate byteorder;
 extern crate num_traits;
 
 use std::io::prelude::*;
 use std::io;
 
-use geo::*;
+use geo_types::*;
 use num_traits::Float;
 use byteorder::{WriteBytesExt, ReadBytesExt};
 use byteorder::{LittleEndian};
@@ -90,14 +90,14 @@ fn write_many_points<W: Write, T: Into<f64>+Float>(mp: &[Coordinate<T>], mut out
 }
 
 /// Convert a Geometry into WKB bytes.
-pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &geo::Geometry<T>) -> Vec<u8> {
+pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &Geometry<T>) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     write_geom_to_wkb(geom, &mut result);
     result
 }
 
 /// Write a geometry to the underlying writer.
-pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, mut result: &mut W) {
+pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut result: &mut W) {
     // FIXME replace type signature with Into<Geometry<T>>
     
     // little endian
@@ -117,9 +117,9 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
         },
         &Geometry::Polygon(ref p) => {
             result.write_u32::<LittleEndian>(3);
-            result.write_u32::<LittleEndian>(1 + p.interiors.len() as u32);
-            write_many_points(&p.exterior.0, &mut result);
-            for i in p.interiors.iter() {
+            result.write_u32::<LittleEndian>(1 + p.interiors().len() as u32);
+            write_many_points(&p.exterior().0, &mut result);
+            for i in p.interiors().iter() {
                 write_many_points(&i.0, &mut result);
             }
         }
@@ -144,10 +144,10 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
             for poly in mp.0.iter() {
                 result.write_u8(1);
                 result.write_u32::<LittleEndian>(3);
-                result.write_u32::<LittleEndian>(1 + poly.interiors.len() as u32);
+                result.write_u32::<LittleEndian>(1 + poly.interiors().len() as u32);
 
-                write_many_points(&poly.exterior.0, &mut result);
-                for int in poly.interiors.iter() {
+                write_many_points(&poly.exterior().0, &mut result);
+                for int in poly.interiors().iter() {
                     write_many_points(&int.0, &mut result);
                 }
             }
@@ -160,7 +160,7 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
 
 }
 /// Read a Geometry from a reader. Converts WKB to a Geometry.
-pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<geo::Geometry<f64>, WKBReadError> {
+pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<Geometry<f64>, WKBReadError> {
     match wkb.read_u8()? {
         0 => unimplemented!(),
         1 => { },  // LittleEndian, OK
@@ -366,11 +366,11 @@ mod tests {
 
         let geom = wkb_to_geom(&mut bytes.as_slice()).unwrap();
         if let Geometry::Polygon(p) = geom {
-            assert_eq!(p.interiors.len(), 0);
-            assert_eq!(p.exterior.0.len(), 3);
-            assert_eq!(p.exterior.0[0], (0., 0.).into());
-            assert_eq!(p.exterior.0[1], (1., 0.).into());
-            assert_eq!(p.exterior.0[2], (0., 1.).into());
+            assert_eq!(p.interiors().len(), 0);
+            assert_eq!(p.exterior().0.len(), 3);
+            assert_eq!(p.exterior().0[0], (0., 0.).into());
+            assert_eq!(p.exterior().0[1], (1., 0.).into());
+            assert_eq!(p.exterior().0[2], (0., 1.).into());
         } else {
             assert!(false);
         }
@@ -531,21 +531,21 @@ mod tests {
 
         if let Geometry::MultiPolygon(mp) = geom {
             assert_eq!(mp.0.len(), 2);
-            assert_eq!(mp.0[0].exterior.0.len(), 5);
-            assert_eq!(mp.0[0].exterior.0[0].x_y(), (0., 0.));
-            assert_eq!(mp.0[0].exterior.0[1].x_y(), (10., 0.));
-            assert_eq!(mp.0[0].exterior.0[2].x_y(), (10., 10.));
-            assert_eq!(mp.0[0].exterior.0[3].x_y(), (0., 10.));
-            assert_eq!(mp.0[0].exterior.0[4].x_y(), (0., 0.));
+            assert_eq!(mp.0[0].exterior().0.len(), 5);
+            assert_eq!(mp.0[0].exterior().0[0].x_y(), (0., 0.));
+            assert_eq!(mp.0[0].exterior().0[1].x_y(), (10., 0.));
+            assert_eq!(mp.0[0].exterior().0[2].x_y(), (10., 10.));
+            assert_eq!(mp.0[0].exterior().0[3].x_y(), (0., 10.));
+            assert_eq!(mp.0[0].exterior().0[4].x_y(), (0., 0.));
 
-            assert_eq!(mp.0[0].interiors.len(), 0);
+            assert_eq!(mp.0[0].interiors().len(), 0);
 
-            assert_eq!(mp.0[1].exterior.0.len(), 4);
-            assert_eq!(mp.0[1].exterior.0[0].x_y(), (2., 2.));
-            assert_eq!(mp.0[1].exterior.0[1].x_y(), (2., 4.));
-            assert_eq!(mp.0[1].exterior.0[2].x_y(), (4., 2.));
-            assert_eq!(mp.0[1].exterior.0[0].x_y(), (2., 2.));
-            assert_eq!(mp.0[1].interiors.len(), 0);
+            assert_eq!(mp.0[1].exterior().0.len(), 4);
+            assert_eq!(mp.0[1].exterior().0[0].x_y(), (2., 2.));
+            assert_eq!(mp.0[1].exterior().0[1].x_y(), (2., 4.));
+            assert_eq!(mp.0[1].exterior().0[2].x_y(), (4., 2.));
+            assert_eq!(mp.0[1].exterior().0[0].x_y(), (2., 2.));
+            assert_eq!(mp.0[1].interiors().len(), 0);
         } else {
             assert!(false);
         }
