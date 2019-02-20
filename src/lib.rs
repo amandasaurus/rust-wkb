@@ -358,19 +358,22 @@ mod tests {
         bytes.write_u8(1);
         bytes.write_u32::<LittleEndian>(3);
         bytes.write_u32::<LittleEndian>(1);
-        bytes.write_u32::<LittleEndian>(3);
+        bytes.write_u32::<LittleEndian>(4);
 
         write_two_f64(&mut bytes, 0, 0);
         write_two_f64(&mut bytes, 1, 0);
         write_two_f64(&mut bytes, 0, 1);
+        // WKB requires that polygons are closed
+        write_two_f64(&mut bytes, 0, 0);
 
         let geom = wkb_to_geom(&mut bytes.as_slice()).unwrap();
         if let Geometry::Polygon(p) = geom {
             assert_eq!(p.interiors().len(), 0);
-            assert_eq!(p.exterior().0.len(), 3);
+            assert_eq!(p.exterior().0.len(), 4);
             assert_eq!(p.exterior().0[0], (0., 0.).into());
             assert_eq!(p.exterior().0[1], (1., 0.).into());
             assert_eq!(p.exterior().0[2], (0., 1.).into());
+            assert_eq!(p.exterior().0[3], (0., 0.).into());
         } else {
             assert!(false);
         }
