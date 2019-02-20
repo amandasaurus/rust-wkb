@@ -382,6 +382,42 @@ mod tests {
     }
 
     #[test]
+    fn wkb_to_polygon_auto_closed() {
+        let mut bytes = Vec::new();
+        bytes.write_u8(1);
+        bytes.write_u32::<LittleEndian>(3);
+        bytes.write_u32::<LittleEndian>(1);
+
+        // only 3 points
+        bytes.write_u32::<LittleEndian>(3);
+
+        write_two_f64(&mut bytes, 0, 0);
+        write_two_f64(&mut bytes, 1, 0);
+        write_two_f64(&mut bytes, 0, 1);
+
+        // We /should/ add this
+        //write_two_f64(&mut bytes, 0, 0);
+
+        let geom = wkb_to_geom(&mut bytes.as_slice()).unwrap();
+        if let Geometry::Polygon(p) = geom {
+            assert_eq!(p.interiors().len(), 0);
+            assert_eq!(p.exterior().0[0], (0., 0.).into());
+            assert_eq!(p.exterior().0[1], (1., 0.).into());
+            assert_eq!(p.exterior().0[2], (0., 1.).into());
+
+            // And yet, the geo-types library has add this point
+            assert_eq!(p.exterior().0[3], (0., 0.).into());
+            assert_eq!(p.exterior().0.len(), 4);
+        } else {
+            assert!(false);
+        }
+
+        // They won't equal
+        assert_ne!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+    }
+
+
+    #[test]
     fn multipoint_to_wkb() {
         let p: Geometry<f64> = Geometry::MultiPoint(MultiPoint(vec![Point::new(0., 0.), Point::new(10., -2.)]));
         let res = geom_to_wkb(&p);
