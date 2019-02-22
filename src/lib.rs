@@ -117,9 +117,9 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
         },
         &Geometry::Polygon(ref p) => {
             result.write_u32::<LittleEndian>(3);
-            result.write_u32::<LittleEndian>(1 + p.interiors.len() as u32);
-            write_many_points(&p.exterior.0, &mut result);
-            for i in p.interiors.iter() {
+            result.write_u32::<LittleEndian>(1 + p.interiors().len() as u32);
+            write_many_points(&p.exterior().0, &mut result);
+            for i in p.interiors().iter() {
                 write_many_points(&i.0, &mut result);
             }
         }
@@ -144,10 +144,10 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &geo::Geometry<T>, 
             for poly in mp.0.iter() {
                 result.write_u8(1);
                 result.write_u32::<LittleEndian>(3);
-                result.write_u32::<LittleEndian>(1 + poly.interiors.len() as u32);
+                result.write_u32::<LittleEndian>(1 + poly.interiors().len() as u32);
 
-                write_many_points(&poly.exterior.0, &mut result);
-                for int in poly.interiors.iter() {
+                write_many_points(&poly.exterior().0, &mut result);
+                for int in poly.interiors().iter() {
                     write_many_points(&int.0, &mut result);
                 }
             }
@@ -358,19 +358,21 @@ mod tests {
         bytes.write_u8(1);
         bytes.write_u32::<LittleEndian>(3);
         bytes.write_u32::<LittleEndian>(1);
-        bytes.write_u32::<LittleEndian>(3);
+        bytes.write_u32::<LittleEndian>(4);
 
         write_two_f64(&mut bytes, 0, 0);
         write_two_f64(&mut bytes, 1, 0);
         write_two_f64(&mut bytes, 0, 1);
+        write_two_f64(&mut bytes, 0, 0);
 
         let geom = wkb_to_geom(&mut bytes.as_slice()).unwrap();
         if let Geometry::Polygon(p) = geom {
-            assert_eq!(p.interiors.len(), 0);
-            assert_eq!(p.exterior.0.len(), 3);
-            assert_eq!(p.exterior.0[0], (0., 0.).into());
-            assert_eq!(p.exterior.0[1], (1., 0.).into());
-            assert_eq!(p.exterior.0[2], (0., 1.).into());
+            assert_eq!(p.interiors().len(), 0);
+            assert_eq!(p.exterior().0.len(), 4);
+            assert_eq!(p.exterior().0[0], (0., 0.).into());
+            assert_eq!(p.exterior().0[1], (1., 0.).into());
+            assert_eq!(p.exterior().0[2], (0., 1.).into());
+            assert_eq!(p.exterior().0[3], (0., 0.).into());
         } else {
             assert!(false);
         }
@@ -531,21 +533,21 @@ mod tests {
 
         if let Geometry::MultiPolygon(mp) = geom {
             assert_eq!(mp.0.len(), 2);
-            assert_eq!(mp.0[0].exterior.0.len(), 5);
-            assert_eq!(mp.0[0].exterior.0[0].x_y(), (0., 0.));
-            assert_eq!(mp.0[0].exterior.0[1].x_y(), (10., 0.));
-            assert_eq!(mp.0[0].exterior.0[2].x_y(), (10., 10.));
-            assert_eq!(mp.0[0].exterior.0[3].x_y(), (0., 10.));
-            assert_eq!(mp.0[0].exterior.0[4].x_y(), (0., 0.));
+            assert_eq!(mp.0[0].exterior().0.len(), 5);
+            assert_eq!(mp.0[0].exterior().0[0].x_y(), (0., 0.));
+            assert_eq!(mp.0[0].exterior().0[1].x_y(), (10., 0.));
+            assert_eq!(mp.0[0].exterior().0[2].x_y(), (10., 10.));
+            assert_eq!(mp.0[0].exterior().0[3].x_y(), (0., 10.));
+            assert_eq!(mp.0[0].exterior().0[4].x_y(), (0., 0.));
 
-            assert_eq!(mp.0[0].interiors.len(), 0);
+            assert_eq!(mp.0[0].interiors().len(), 0);
 
-            assert_eq!(mp.0[1].exterior.0.len(), 4);
-            assert_eq!(mp.0[1].exterior.0[0].x_y(), (2., 2.));
-            assert_eq!(mp.0[1].exterior.0[1].x_y(), (2., 4.));
-            assert_eq!(mp.0[1].exterior.0[2].x_y(), (4., 2.));
-            assert_eq!(mp.0[1].exterior.0[0].x_y(), (2., 2.));
-            assert_eq!(mp.0[1].interiors.len(), 0);
+            assert_eq!(mp.0[1].exterior().0.len(), 4);
+            assert_eq!(mp.0[1].exterior().0[0].x_y(), (2., 2.));
+            assert_eq!(mp.0[1].exterior().0[1].x_y(), (2., 4.));
+            assert_eq!(mp.0[1].exterior().0[2].x_y(), (4., 2.));
+            assert_eq!(mp.0[1].exterior().0[0].x_y(), (2., 2.));
+            assert_eq!(mp.0[1].interiors().len(), 0);
         } else {
             assert!(false);
         }
