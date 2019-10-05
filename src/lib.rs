@@ -96,13 +96,15 @@ pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &Geometry<T>) -> Vec<u8> {
     result
 }
 
-/// Write a geometry to the underlying writer.
+
+
+
+/// Write a geometry to the underlying writer, except for the endianity byte.
 pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut result: &mut W) {
     // FIXME replace type signature with Into<Geometry<T>>
-    
     // little endian
     result.write_u8(1);
-    match geom {
+        match geom {
         &Geometry::Point(p) => {
             result.write_u32::<LittleEndian>(1);
             write_point(&p.0, &mut result);
@@ -152,13 +154,17 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut r
                 }
             }
         },
-        &Geometry::GeometryCollection(ref _gc) => {
-            // FIXME implement, don't want to duplicate all the above
-            unimplemented!();
+        &Geometry::GeometryCollection(ref gc) => {
+            result.write_u32::<LittleEndian>(7);
+            result.write_u32::<LittleEndian>(gc.len() as u32);
+            for geom in gc.0.iter() {
+                write_geom_to_wkb(geom, result)
+            }
         }
     }
 
 }
+
 /// Read a Geometry from a reader. Converts WKB to a Geometry.
 pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<Geometry<f64>, WKBReadError> {
     match wkb.read_u8()? {
