@@ -597,9 +597,9 @@ mod tests {
 
     }
 
-    #[allow(dead_code)]
+    #[test]
     fn geometrycollection_to_wkb() {
-        // FIXME finish
+        
         let p: Geometry<_> = Point::new(0., 0.).into();
         let l: Geometry<_> = LineString(vec![(10., 0.).into(), (20., 0.).into()]).into();
         let gc: Geometry<_> = Geometry::GeometryCollection(GeometryCollection(vec![p, l]));
@@ -607,6 +607,16 @@ mod tests {
         let res = geom_to_wkb(&gc);
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 7); // geometry collection
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);
+        assert_eq!(res.read_u8().unwrap(), 1);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 1); // point
+        assert_two_f64(&mut res, 0, 0);
+        assert_eq!(res.read_u8().unwrap(), 1);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);
+        assert_two_f64(&mut res, 10, 0);
+        assert_two_f64(&mut res, 20, 0);
     }
 
     #[test]
