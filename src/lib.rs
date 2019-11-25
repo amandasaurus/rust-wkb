@@ -48,6 +48,9 @@ use num_traits::Float;
 use byteorder::{WriteBytesExt, ReadBytesExt};
 use byteorder::{LittleEndian};
 
+
+const WKBSRIDFLAG: u32 = 0x20000000u32;
+
 #[derive(Debug)]
 pub enum WKBReadError {
     WrongType,
@@ -167,7 +170,15 @@ pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<Geometry<f64>, WKBReadErr
         _ => panic!(),
     };
 
-    match wkb.read_u32::<LittleEndian>()? {
+    let unknown_type = wkb.read_u32::<LittleEndian>()?;
+    let maybe_srid: bool = (unknown_type & WKBSRIDFLAG) != 0u32;
+
+    let geometry_type = unknown_type & 0x0FFFFFFFu32; // mask off any potential flags
+    if maybe_srid {
+        wkb.read_u32::<LittleEndian>()?; // skip the srid
+    }
+
+    match geometry_type {
         1 => {
             // Point
             Ok(Geometry::Point(Point(read_point(&mut wkb)?)))
