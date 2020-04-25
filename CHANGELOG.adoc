@@ -1,6 +1,6 @@
 = CHANGELOG
 
-== Unreleased
+== v0.5.0 (2020-04-25)
 
  * Switch `geo` dependency to the `geo-types` crate (v0.4)
  * Support GeometryCollections (PR #4) from tyrylu
