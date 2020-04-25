@@ -4,6 +4,7 @@
 
  * Switch `geo` dependency to the `geo-types` crate (v0.4)
  * Support GeometryCollections (PR #4) from tyrylu
+ * Upgrade `geo-types` to v0.5
 
 == v0.3.0 
 
