@@ -104,7 +104,7 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut r
     // FIXME replace type signature with Into<Geometry<T>>
     // little endian
     result.write_u8(1);
-        match geom {
+    match geom {
         &Geometry::Point(p) => {
             result.write_u32::<LittleEndian>(1);
             write_point(&p.0, &mut result);
