@@ -96,10 +96,12 @@ pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &Geometry<T>) -> Vec<u8> {
     result
 }
 
-/// Write a geometry to the underlying writer.
+
+
+
+/// Write a geometry to the underlying writer, except for the endianity byte.
 pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut result: &mut W) {
     // FIXME replace type signature with Into<Geometry<T>>
-    
     // little endian
     result.write_u8(1);
     match geom {
@@ -152,13 +154,17 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut r
                 }
             }
         },
-        &Geometry::GeometryCollection(ref _gc) => {
-            // FIXME implement, don't want to duplicate all the above
-            unimplemented!();
+        &Geometry::GeometryCollection(ref gc) => {
+            result.write_u32::<LittleEndian>(7);
+            result.write_u32::<LittleEndian>(gc.len() as u32);
+            for geom in gc.0.iter() {
+                write_geom_to_wkb(geom, result)
+            }
         }
     }
 
 }
+
 /// Read a Geometry from a reader. Converts WKB to a Geometry.
 pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<Geometry<f64>, WKBReadError> {
     match wkb.read_u8()? {
@@ -591,9 +597,9 @@ mod tests {
 
     }
 
-    #[allow(dead_code)]
+    #[test]
     fn geometrycollection_to_wkb() {
-        // FIXME finish
+        
         let p: Geometry<_> = Point::new(0., 0.).into();
         let l: Geometry<_> = LineString(vec![(10., 0.).into(), (20., 0.).into()]).into();
         let gc: Geometry<_> = Geometry::GeometryCollection(GeometryCollection(vec![p, l]));
@@ -601,6 +607,16 @@ mod tests {
         let res = geom_to_wkb(&gc);
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 7); // geometry collection
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);
+        assert_eq!(res.read_u8().unwrap(), 1);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 1); // point
+        assert_two_f64(&mut res, 0, 0);
+        assert_eq!(res.read_u8().unwrap(), 1);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);
+        assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);
+        assert_two_f64(&mut res, 10, 0);
+        assert_two_f64(&mut res, 20, 0);
     }
 
     #[test]
