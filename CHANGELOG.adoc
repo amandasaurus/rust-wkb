@@ -3,6 +3,7 @@
 == Unreleased
 
  * Switch `geo` dependency to the `geo-types` crate (v0.4)
+ * Support GeometryCollections (PR #4) from tyrylu
 
 == v0.3.0 
 
