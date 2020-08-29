@@ -1,4 +1,4 @@
-# rust-wkb
+# `rust-wkb`
 
 This crate provides functions to convert `rust-geo` geometry types to and from [Well Known Binary](https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary) format, i.e. [ISO 19125](https://www.iso.org/standard/40114.html)
 
