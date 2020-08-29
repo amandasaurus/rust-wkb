@@ -11,7 +11,7 @@
 //! use wkb::*;
 //!
 //! let p: Geometry<f64> = Geometry::Point(Point::new(2., 4.));
-//! let res = geom_to_wkb(&p);
+//! let res = geom_to_wkb(&p).unwrap();
 //! assert_eq!(res, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
 //! # }
 //! ```
@@ -65,15 +65,29 @@ impl From<io::Error> for WKBReadError {
 }
 
 
+#[derive(Debug)]
+pub enum WKBWriteError {
+    IOError(io::Error),
+}
+
+impl From<io::Error> for WKBWriteError {
+    fn from(err: io::Error) -> WKBWriteError {
+        WKBWriteError::IOError(err)
+    }
+}
+
+
+
 fn read_point<I: Read>(mut wkb: I) -> Result<Coordinate<f64>, WKBReadError> {
     let x: f64 = wkb.read_f64::<LittleEndian>()?;
     let y: f64 = wkb.read_f64::<LittleEndian>()?;
     Ok(Coordinate{ x, y })
 }
 
-fn write_point<W: Write, T: Into<f64>+Float>(c: &Coordinate<T>, out: &mut W) {
-    out.write_f64::<LittleEndian>(c.x.into());
-    out.write_f64::<LittleEndian>(c.y.into());
+fn write_point<W: Write, T: Into<f64>+Float>(c: &Coordinate<T>, out: &mut W) -> Result<(), WKBWriteError> {
+    out.write_f64::<LittleEndian>(c.x.into())?;
+    out.write_f64::<LittleEndian>(c.y.into())?;
+    Ok(())
 }
 
 fn read_many_points<I: Read>(mut wkb: I) -> Result<Vec<Coordinate<f64>>, WKBReadError> {
@@ -86,86 +100,90 @@ fn read_many_points<I: Read>(mut wkb: I) -> Result<Vec<Coordinate<f64>>, WKBRead
     Ok(res)
 }
 
-fn write_many_points<W: Write, T: Into<f64>+Float>(mp: &[Coordinate<T>], mut out: &mut W) {
-    out.write_u32::<LittleEndian>(mp.len() as u32);
+fn write_many_points<W: Write, T: Into<f64>+Float>(mp: &[Coordinate<T>], mut out: &mut W) -> Result<(), WKBWriteError> {
+    out.write_u32::<LittleEndian>(mp.len() as u32)?;
     for p in mp.iter() {
-        write_point(p, &mut out);
+        write_point(p, &mut out)?;
     }
+
+    Ok(())
 }
 
 /// Convert a Geometry into WKB bytes.
-pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &Geometry<T>) -> Vec<u8> {
+pub fn geom_to_wkb<T: Into<f64>+Float>(geom: &Geometry<T>) -> Result<Vec<u8>, WKBWriteError> {
     let mut result: Vec<u8> = Vec::new();
-    write_geom_to_wkb(geom, &mut result);
-    result
+    write_geom_to_wkb(geom, &mut result)?;
+    Ok(result)
 }
 
 
 
 
 /// Write a geometry to the underlying writer, except for the endianity byte.
-pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut result: &mut W) {
+pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut result: &mut W) -> Result<(), WKBWriteError> {
     // FIXME replace type signature with Into<Geometry<T>>
     // little endian
-    result.write_u8(1);
+    result.write_u8(1)?;
     match geom {
         &Geometry::Point(p) => {
-            result.write_u32::<LittleEndian>(1);
-            write_point(&p.0, &mut result);
+            result.write_u32::<LittleEndian>(1)?;
+            write_point(&p.0, &mut result)?;
         },
         &Geometry::LineString(ref ls) => {
-            result.write_u32::<LittleEndian>(2);
-            write_many_points(&ls.0, &mut result);
+            result.write_u32::<LittleEndian>(2)?;
+            write_many_points(&ls.0, &mut result)?;
         },
         &Geometry::Line(ref l) => {
-            result.write_u32::<LittleEndian>(2);
-            write_many_points(&[l.start, l.end], &mut result);
+            result.write_u32::<LittleEndian>(2)?;
+            write_many_points(&[l.start, l.end], &mut result)?;
         },
         &Geometry::Polygon(ref p) => {
-            result.write_u32::<LittleEndian>(3);
-            result.write_u32::<LittleEndian>(1 + p.interiors().len() as u32);
-            write_many_points(&p.exterior().0, &mut result);
+            result.write_u32::<LittleEndian>(3)?;
+            result.write_u32::<LittleEndian>(1 + p.interiors().len() as u32)?;
+            write_many_points(&p.exterior().0, &mut result)?;
             for i in p.interiors().iter() {
-                write_many_points(&i.0, &mut result);
+                write_many_points(&i.0, &mut result)?;
             }
         }
         &Geometry::MultiPoint(ref mp) => {
-            result.write_u32::<LittleEndian>(4);
-            write_many_points(&mp.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(), &mut result);
+            result.write_u32::<LittleEndian>(4)?;
+            write_many_points(&mp.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(), &mut result)?;
         },
         &Geometry::MultiLineString(ref mls) => {
-            result.write_u32::<LittleEndian>(5);
-            result.write_u32::<LittleEndian>(mls.0.len() as u32);
+            result.write_u32::<LittleEndian>(5)?;
+            result.write_u32::<LittleEndian>(mls.0.len() as u32)?;
             for ls in mls.0.iter() {
                 // I tried to have this call write_geom_to_wkb again, but I couldn't get the types
                 // working.
-                result.write_u8(1);
-                result.write_u32::<LittleEndian>(2);
-                write_many_points(&ls.0, &mut result);
+                result.write_u8(1)?;
+                result.write_u32::<LittleEndian>(2)?;
+                write_many_points(&ls.0, &mut result)?;
             }
         },
         &Geometry::MultiPolygon(ref mp) => {
-            result.write_u32::<LittleEndian>(6);
-            result.write_u32::<LittleEndian>(mp.0.len() as u32);
+            result.write_u32::<LittleEndian>(6)?;
+            result.write_u32::<LittleEndian>(mp.0.len() as u32)?;
             for poly in mp.0.iter() {
-                result.write_u8(1);
-                result.write_u32::<LittleEndian>(3);
-                result.write_u32::<LittleEndian>(1 + poly.interiors().len() as u32);
+                result.write_u8(1)?;
+                result.write_u32::<LittleEndian>(3)?;
+                result.write_u32::<LittleEndian>(1 + poly.interiors().len() as u32)?;
 
-                write_many_points(&poly.exterior().0, &mut result);
+                write_many_points(&poly.exterior().0, &mut result)?;
                 for int in poly.interiors().iter() {
-                    write_many_points(&int.0, &mut result);
+                    write_many_points(&int.0, &mut result)?;
                 }
             }
         },
         &Geometry::GeometryCollection(ref gc) => {
-            result.write_u32::<LittleEndian>(7);
-            result.write_u32::<LittleEndian>(gc.len() as u32);
+            result.write_u32::<LittleEndian>(7)?;
+            result.write_u32::<LittleEndian>(gc.len() as u32)?;
             for geom in gc.0.iter() {
-                write_geom_to_wkb(geom, result)
+                write_geom_to_wkb(geom, result)?;
             }
         }
     }
+
+    Ok(())
 
 }
 
@@ -247,29 +265,29 @@ mod tests {
     }
 
     fn write_two_f64<W: Write, F: Into<f64>>(writer: &mut W, a: F, b: F) {
-        writer.write_f64::<LittleEndian>(a.into());
-        writer.write_f64::<LittleEndian>(b.into());
+        writer.write_f64::<LittleEndian>(a.into()).unwrap();
+        writer.write_f64::<LittleEndian>(b.into()).unwrap();
     }
 
     #[test]
     fn point_to_wkb() {
         let p: Geometry<f64> = Geometry::Point(Point::new(2., 4.));
-        let res = geom_to_wkb(&p);
+        let res = geom_to_wkb(&p).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 1);
         assert_two_f64(&mut res, 2, 4);
 
-        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).as_slice()).unwrap(), p);
+        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).unwrap().as_slice()).unwrap(), p);
     }
 
     #[test]
     fn wkb_to_point() {
         let mut bytes = Vec::new();
-        bytes.write_u8(1);
-        bytes.write_u32::<LittleEndian>(1);
-        bytes.write_f64::<LittleEndian>(100.);
-        bytes.write_f64::<LittleEndian>(-2.);
+        bytes.write_u8(1).unwrap();
+        bytes.write_u32::<LittleEndian>(1).unwrap();
+        bytes.write_f64::<LittleEndian>(100.).unwrap();
+        bytes.write_f64::<LittleEndian>(-2.).unwrap();
 
         let geom = wkb_to_geom(&mut bytes.as_slice()).unwrap();
         // TODO need a geom.is_point()
@@ -280,7 +298,7 @@ mod tests {
             assert!(false);
         }
 
-        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()).unwrap(), bytes);
     }
 
     #[test]
@@ -288,7 +306,7 @@ mod tests {
         let ls: LineString<f64> = vec![(0., 0.), (1., 0.), (1., 1.), (0., 1.), (0., 0.)].into();
         let ls = Geometry::LineString(ls);
 
-        let res = geom_to_wkb(&ls);
+        let res = geom_to_wkb(&ls).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);  // LittleEndian
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 2);  // 2 = Linestring
@@ -300,16 +318,16 @@ mod tests {
         assert_two_f64(&mut res, 0, 1);
         assert_two_f64(&mut res, 0, 0);
 
-        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&ls).as_slice()).unwrap(), ls);
+        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&ls).unwrap().as_slice()).unwrap(), ls);
     }
 
     #[test]
     fn wkb_to_linestring() {
         let mut bytes = Vec::new();
-        bytes.write_u8(1);
+        bytes.write_u8(1).unwrap();
 
-        bytes.write_u32::<LittleEndian>(2);
-        bytes.write_u32::<LittleEndian>(2);
+        bytes.write_u32::<LittleEndian>(2).unwrap();
+        bytes.write_u32::<LittleEndian>(2).unwrap();
 
         write_two_f64(&mut bytes, 0, 0);
         write_two_f64(&mut bytes, 1000, 1000);
@@ -325,7 +343,7 @@ mod tests {
             assert!(false);
         }
 
-        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()).unwrap(), bytes);
     }
 
 
@@ -335,7 +353,7 @@ mod tests {
         let int = vec![(2., 2.), (2., 4.), (4., 4.), (4., 2.), (2., 2.)].into();
         let p = Geometry::Polygon(Polygon::new(ls, vec![int]));
 
-        let res = geom_to_wkb(&p);
+        let res = geom_to_wkb(&p).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 3);
@@ -359,16 +377,16 @@ mod tests {
         assert_two_f64(&mut res, 4, 2);
         assert_two_f64(&mut res, 2, 2);
 
-        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).as_slice()).unwrap(), p);
+        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).unwrap().as_slice()).unwrap(), p);
     }
 
     #[test]
     fn wkb_to_polygon() {
         let mut bytes = Vec::new();
-        bytes.write_u8(1);
-        bytes.write_u32::<LittleEndian>(3);
-        bytes.write_u32::<LittleEndian>(1);
-        bytes.write_u32::<LittleEndian>(4);
+        bytes.write_u8(1).unwrap();
+        bytes.write_u32::<LittleEndian>(3).unwrap();
+        bytes.write_u32::<LittleEndian>(1).unwrap();
+        bytes.write_u32::<LittleEndian>(4).unwrap();
 
         write_two_f64(&mut bytes, 0, 0);
         write_two_f64(&mut bytes, 1, 0);
@@ -388,18 +406,18 @@ mod tests {
             assert!(false);
         }
 
-        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()).unwrap(), bytes);
     }
 
     #[test]
     fn wkb_to_polygon_auto_closed() {
         let mut bytes = Vec::new();
-        bytes.write_u8(1);
-        bytes.write_u32::<LittleEndian>(3);
-        bytes.write_u32::<LittleEndian>(1);
+        bytes.write_u8(1).unwrap();
+        bytes.write_u32::<LittleEndian>(3).unwrap();
+        bytes.write_u32::<LittleEndian>(1).unwrap();
 
         // only 3 points
-        bytes.write_u32::<LittleEndian>(3);
+        bytes.write_u32::<LittleEndian>(3).unwrap();
 
         write_two_f64(&mut bytes, 0, 0);
         write_two_f64(&mut bytes, 1, 0);
@@ -423,14 +441,14 @@ mod tests {
         }
 
         // They won't equal
-        assert_ne!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+        assert_ne!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()).unwrap(), bytes);
     }
 
 
     #[test]
     fn multipoint_to_wkb() {
         let p: Geometry<f64> = Geometry::MultiPoint(MultiPoint(vec![Point::new(0., 0.), Point::new(10., -2.)]));
-        let res = geom_to_wkb(&p);
+        let res = geom_to_wkb(&p).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 4);
@@ -438,15 +456,15 @@ mod tests {
         assert_two_f64(&mut res, 0, 0);
         assert_two_f64(&mut res, 10, -2);
 
-        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).as_slice()).unwrap(), p);
+        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).unwrap().as_slice()).unwrap(), p);
     }
 
     #[test]
     fn wkb_to_multipoint() {
         let mut bytes = Vec::new();
-        bytes.write_u8(1);
-        bytes.write_u32::<LittleEndian>(4);
-        bytes.write_u32::<LittleEndian>(1);
+        bytes.write_u8(1).unwrap();
+        bytes.write_u32::<LittleEndian>(4).unwrap();
+        bytes.write_u32::<LittleEndian>(1).unwrap();
         write_two_f64(&mut bytes, 100, -2);
 
         let geom = wkb_to_geom(&mut bytes.as_slice()).unwrap();
@@ -458,7 +476,7 @@ mod tests {
             assert!(false);
         }
 
-        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()).unwrap(), bytes);
     }
 
     #[test]
@@ -468,7 +486,7 @@ mod tests {
                     vec![(10., 10.), (10., 11.)].into(),
                    ]));
 
-        let res = geom_to_wkb(&ls);
+        let res = geom_to_wkb(&ls).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 5); // 5 - MultiLineString
@@ -486,19 +504,19 @@ mod tests {
         assert_two_f64(&mut res, 10, 10);
         assert_two_f64(&mut res, 10, 11);
 
-        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&ls).as_slice()).unwrap(), ls);
+        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&ls).unwrap().as_slice()).unwrap(), ls);
     }
 
     #[test]
     fn wkb_to_multilinestring() {
         let mut bytes = Vec::new();
-        bytes.write_u8(1);
-        bytes.write_u32::<LittleEndian>(5);
-        bytes.write_u32::<LittleEndian>(1);
+        bytes.write_u8(1).unwrap();
+        bytes.write_u32::<LittleEndian>(5).unwrap();
+        bytes.write_u32::<LittleEndian>(1).unwrap();
 
-        bytes.write_u8(1);
-        bytes.write_u32::<LittleEndian>(2);
-        bytes.write_u32::<LittleEndian>(3);
+        bytes.write_u8(1).unwrap();
+        bytes.write_u32::<LittleEndian>(2).unwrap();
+        bytes.write_u32::<LittleEndian>(3).unwrap();
         write_two_f64(&mut bytes, 0, 0);
         write_two_f64(&mut bytes, 1, 0);
         write_two_f64(&mut bytes, 0, 1);
@@ -514,7 +532,7 @@ mod tests {
             assert!(false);
         }
 
-        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()), bytes);
+        assert_eq!(geom_to_wkb(&wkb_to_geom(&mut bytes.as_slice()).unwrap()).unwrap(), bytes);
     }
 
 
@@ -527,7 +545,7 @@ mod tests {
         let p2 = Polygon::new(int, vec![]);
         let p = Geometry::MultiPolygon(MultiPolygon(vec![p1, p2]));
 
-        let res = geom_to_wkb(&p);
+        let res = geom_to_wkb(&p).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 6);  // Multipolygon
@@ -555,7 +573,7 @@ mod tests {
         assert_two_f64(&mut res, 2, 4);
         assert_two_f64(&mut res, 2, 2);
 
-        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).as_slice()).unwrap(), p);
+        assert_eq!(wkb_to_geom(&mut geom_to_wkb(&p).unwrap().as_slice()).unwrap(), p);
     }
 
     #[test]
@@ -608,7 +626,7 @@ mod tests {
         let l: Geometry<_> = LineString(vec![(10., 0.).into(), (20., 0.).into()]).into();
         let gc: Geometry<_> = Geometry::GeometryCollection(GeometryCollection(vec![p, l]));
 
-        let res = geom_to_wkb(&gc);
+        let res = geom_to_wkb(&gc).unwrap();
         let mut res = res.as_slice();
         assert_eq!(res.read_u8().unwrap(), 1);
         assert_eq!(res.read_u32::<LittleEndian>().unwrap(), 7); // geometry collection
@@ -661,11 +679,11 @@ mod tests {
         use byteorder::BigEndian;
 
         let mut bytes = Vec::new();
-        bytes.write_u8(0);
-        bytes.write_u32::<BigEndian>(1);
+        bytes.write_u8(0).unwrap();
+        bytes.write_u32::<BigEndian>(1).unwrap();
         let res = wkb_to_geom(&mut bytes.as_slice());
         assert!(res.is_err());
     }
- 
+    
 
 }
