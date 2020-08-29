@@ -35,7 +35,6 @@
 //!
 //!
 
-#![allow(unused_must_use)]
 extern crate geo_types;
 extern crate byteorder;
 extern crate num_traits;
@@ -67,6 +66,7 @@ impl From<io::Error> for WKBReadError {
 
 #[derive(Debug)]
 pub enum WKBWriteError {
+    /// An IO Error
     IOError(io::Error),
 }
 
