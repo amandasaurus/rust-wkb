@@ -47,13 +47,16 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 use geo_types::*;
 use num_traits::Float;
 
+/// An error occured when reading
 #[derive(Debug)]
 pub enum WKBReadError {
     /// This WKB is in BigEndian format, which this library does not yet support.
     UnsupportedBigEndian,
 
+    /// Within in the format, there was an unexpected or wrong data type
     WrongType,
 
+    /// Underlying IO error from the Reader
     IOError(io::Error),
 }
 
@@ -63,6 +66,7 @@ impl From<io::Error> for WKBReadError {
     }
 }
 
+/// An error occured when writing
 #[derive(Debug)]
 pub enum WKBWriteError {
     /// Geometry is a `geo_types::Rect`, which this library does not yet support
