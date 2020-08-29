@@ -22,16 +22,33 @@
 //! # extern crate geo_types;
 //! # extern crate wkb;
 //! # fn main() {
+//! use std::io::prelude::*;
+//! use std::io::Cursor;
 //! use geo_types::*;
 //! use wkb::*;
 //!
 //! let bytes: Vec<u8> = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64];
-//! let p: Geometry<f64> = wkb_to_geom(&mut bytes.as_slice()).unwrap();
+//! let mut bytes_cursor = Cursor::new(bytes);
+//! let p = bytes_cursor.read_wkb().unwrap();
 //! assert_eq!(p, Geometry::Point(Point::new(2., 4.)));
 //! # }
 //! ```
 //!
-//! Adding proper `*Ext` traits is planned.
+//! `.write_wkb(Geometry<Into<f64>>)` works similar:
+//!
+//! ```rust
+//! # extern crate geo_types;
+//! # extern crate wkb;
+//! # fn main() {
+//! # use std::io::prelude::*;
+//! # use geo_types::*;
+//! # use wkb::*;
+//!
+//! let mut bytes: Vec<u8> = vec![];
+//! bytes.write_wkb(&Geometry::Point(Point::new(2_f64, 4.))).unwrap();
+//! assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
+//! # }
+//! ```
 //!
 //!
 
@@ -43,6 +60,38 @@ use std::io::prelude::*;
 
 use geo_types::*;
 use num_traits::Float;
+
+/// Extension trait for `Read`
+pub trait WKBReadExt {
+    /// Attempt to read a Geometry<f64> from this reader
+    fn read_wkb(&mut self) -> Result<Geometry<f64>, WKBReadError>;
+}
+
+impl<R: Read> WKBReadExt for R {
+    #[inline]
+    fn read_wkb(&mut self) -> Result<Geometry<f64>, WKBReadError>
+    {
+        wkb_to_geom(self)
+    }
+}
+
+
+/// Extension trait for `Write`
+pub trait WKBWriteExt {
+    /// Attempt to write a Geometry<Into<f64>> to this writer.
+    fn write_wkb<T>(&mut self, g: &Geometry<T>) -> Result<(), WKBWriteError>
+        where
+            T: Into<f64>+Float;
+}
+
+impl<W: Write> WKBWriteExt for W {
+    fn write_wkb<T>(&mut self, g: &Geometry<T>) -> Result<(), WKBWriteError>
+        where
+            T: Into<f64>+Float,
+    {
+        write_geom_to_wkb(g, self)
+    }
+}
 
 /// An error occured when reading
 #[derive(Debug)]
@@ -60,6 +109,54 @@ pub enum WKBReadError {
 impl From<io::Error> for WKBReadError {
     fn from(err: io::Error) -> WKBReadError {
         WKBReadError::IOError(err)
+    }
+}
+
+/// A thing (`Geometry`) that can be read or written as WKB
+///
+/// ```rust
+/// # extern crate geo_types;
+/// # extern crate wkb;
+/// # fn main() {
+/// use geo_types::*;
+/// use wkb::*;
+/// let p: Geometry<f64> = Geometry::Point(Point::new(2., 4.));
+/// let mut bytes = Vec::new();
+/// p.write_as_wkb(&mut bytes).unwrap();
+/// assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
+///
+/// //let p2 = Point::new(2., 4.);
+/// //let mut bytes = Vec::new();
+/// //p2.write_as_wkb(&mut bytes).unwrap();
+/// //assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
+/// # }
+/// ```
+pub trait WKBAbleExt {
+    /// Attempt to write self as WKB to a `Write`.
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>;
+
+    /// Return self as WKB bytes
+    fn as_wkb_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.write_as_wkb(&mut bytes).unwrap();
+        bytes
+    }
+
+    /// Attempt to read an instance of self from this `Read`.
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError> where Self: Sized;
+}
+
+impl WKBAbleExt for Geometry<f64>
+{
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        write_geom_to_wkb(self, w)
+    }
+
+
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        wkb_to_geom(r)
     }
 }
 
@@ -148,10 +245,13 @@ pub fn geom_to_wkb<T: Into<f64> + Float>(geom: &Geometry<T>) -> Result<Vec<u8>, 
 }
 
 /// Write a geometry to the underlying writer, except for the endianity byte.
-pub fn write_geom_to_wkb<W: Write, T: Into<f64> + Float>(
+pub fn write_geom_to_wkb<W, T>(
     geom: &Geometry<T>,
     mut result: &mut W,
-) -> Result<(), WKBWriteError> {
+) -> Result<(), WKBWriteError>
+    where T: Into<f64>+Float,
+          W: Write + ?Sized,
+{
     // FIXME replace type signature with Into<Geometry<T>>
     // little endian
     result.write(&[1])?;
@@ -226,7 +326,9 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64> + Float>(
 }
 
 /// Read a Geometry from a reader. Converts WKB to a Geometry.
-pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<Geometry<f64>, WKBReadError> {
+pub fn wkb_to_geom<R>(mut wkb: &mut R) -> Result<Geometry<f64>, WKBReadError>
+    where R: Read + ?Sized
+{
     match read_u8(&mut wkb)? {
         0 => {
             return Err(WKBReadError::UnsupportedBigEndian);

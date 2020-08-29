@@ -6,6 +6,8 @@
  * Writing a geometry now can returns a `WKBWriteError`.
  * Upgrade `geo-types` from v0.5 to v0.6
  * Internal refactoring to utilize current Rust features
+ * Added `WKBReadExt` & `WKBWriteExt` which adds `.read_wkb`/`.write_wkb` to all `Read` & `Write`
+ * Added `WKBAbleExt` for `Geometry<f64>` which adds convience functions for reading & writing to/from WKB.
 
 == v0.5.0 (2020-04-25)
 
