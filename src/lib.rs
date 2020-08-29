@@ -50,7 +50,11 @@ use byteorder::{LittleEndian};
 
 #[derive(Debug)]
 pub enum WKBReadError {
+    /// This WKB is in BigEndian format, which this library does not yet support.
+    UnsupportedBigEndian,
+
     WrongType,
+
     IOError(io::Error),
 }
 
@@ -168,7 +172,7 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut r
 /// Read a Geometry from a reader. Converts WKB to a Geometry.
 pub fn wkb_to_geom<I: Read>(mut wkb: &mut I) -> Result<Geometry<f64>, WKBReadError> {
     match wkb.read_u8()? {
-        0 => unimplemented!(),
+        0 => { return Err(WKBReadError::UnsupportedBigEndian); },
         1 => { },  // LittleEndian, OK
         _ => panic!(),
     };
@@ -650,5 +654,18 @@ mod tests {
             vec![(2., 2.), (3., 2.)].into(),
         ])));
     }
+
+
+    #[test]
+    fn bigendian_not_supported() {
+        use byteorder::BigEndian;
+
+        let mut bytes = Vec::new();
+        bytes.write_u8(0);
+        bytes.write_u32::<BigEndian>(1);
+        let res = wkb_to_geom(&mut bytes.as_slice());
+        assert!(res.is_err());
+    }
+ 
 
 }
