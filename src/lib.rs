@@ -66,6 +66,12 @@ impl From<io::Error> for WKBReadError {
 
 #[derive(Debug)]
 pub enum WKBWriteError {
+    /// Geometry is a `geo_types::Rect`, which this library does not yet support
+    UnsupportedGeoTypeRect,
+
+    /// Geometry is a `geo_types::Triangle`, which this library does not yet support
+    UnsupportedGeoTypeTriangle,
+
     /// An IO Error
     IOError(io::Error),
 }
@@ -180,6 +186,12 @@ pub fn write_geom_to_wkb<W: Write, T: Into<f64>+Float>(geom: &Geometry<T>, mut r
             for geom in gc.0.iter() {
                 write_geom_to_wkb(geom, result)?;
             }
+        }
+        &Geometry::Rect(ref _rect) => {
+            return Err(WKBWriteError::UnsupportedGeoTypeRect);
+        }
+        &Geometry::Triangle(ref _t) => {
+            return Err(WKBWriteError::UnsupportedGeoTypeTriangle);
         }
     }
 
