@@ -9,5 +9,4 @@ license = "AGPL-3.0+"
 
 [dependencies]
 geo-types = "0.6"
-byteorder = "1"
 num-traits = "0.2.6"

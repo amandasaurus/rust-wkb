@@ -5,6 +5,7 @@
  * For big endian input, return `WKBReadError::UnsupportedBigEndian`, rather than panic
  * Writing a geometry now can returns a `WKBWriteError`.
  * Upgrade `geo-types` from v0.5 to v0.6
+ * Internal refactoring to utilize current Rust features
 
 == v0.5.0 (2020-04-25)
 
