@@ -1,6 +1,6 @@
 = CHANGELOG
 
-== Unreleased
+== v0.7.0 (2020-09-23)
 
  * Support reading `GeometryCollection`, thanks to link:https://github.com/rory/rust-wkb/pull/7[tyrylu's patch].
 
