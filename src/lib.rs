@@ -399,6 +399,14 @@ pub fn wkb_to_geom<R>(mut wkb: &mut R) -> Result<Geometry<f64>, WKBReadError>
             }
 
             Ok(Geometry::MultiPolygon(MultiPolygon(polygons)))
+        },
+        7 => {
+            let num_geometries = read_u32(&mut wkb)? as usize;
+            let mut geometries = Vec::with_capacity(num_geometries);
+            for _i in 0..num_geometries {
+                geometries.push(wkb_to_geom(wkb)?);
+            }
+            Ok(Geometry::GeometryCollection(GeometryCollection(geometries)))
         }
         _ => unimplemented!(),
     }
@@ -865,5 +873,14 @@ mod tests {
         bytes.write_all(&1_u32.to_be_bytes()).unwrap();
         let res = wkb_to_geom(&mut bytes.as_slice());
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn wkb_to_geometrycollection() {
+        let original_collection = GeometryCollection(vec![Geometry::Point(Point::new(1.5, 2.5)), Geometry::LineString(line_string![(x: 0.5, y: 0.5), (x: 5.5, y: 5.5)])]);
+        let original_geometry = Geometry::GeometryCollection(original_collection);
+        let wkb = geom_to_wkb(&original_geometry).unwrap();
+        let parsed_geometry = wkb_to_geom(&mut wkb.as_slice()).unwrap();
+        assert_eq!(original_geometry, parsed_geometry);
     }
 }
