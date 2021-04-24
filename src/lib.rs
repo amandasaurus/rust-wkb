@@ -55,6 +55,7 @@
 extern crate geo_types;
 extern crate num_traits;
 
+use std::fmt::Debug;
 use std::io;
 use std::io::prelude::*;
 
@@ -81,13 +82,13 @@ pub trait WKBWriteExt {
     /// Attempt to write a Geometry<Into<f64>> to this writer.
     fn write_wkb<T>(&mut self, g: &Geometry<T>) -> Result<(), WKBWriteError>
         where
-            T: Into<f64>+Float;
+            T: Into<f64>+Float+Debug;
 }
 
 impl<W: Write> WKBWriteExt for W {
     fn write_wkb<T>(&mut self, g: &Geometry<T>) -> Result<(), WKBWriteError>
         where
-            T: Into<f64>+Float,
+            T: Into<f64>+Float+Debug,
     {
         write_geom_to_wkb(g, self)
     }
@@ -206,7 +207,7 @@ fn read_point(mut wkb: impl Read) -> Result<Coordinate<f64>, WKBReadError> {
     Ok(Coordinate { x, y })
 }
 
-fn write_point<W: Write, T: Into<f64> + Float>(
+fn write_point<W: Write, T: Into<f64> + Float + Debug>(
     c: &Coordinate<T>,
     out: &mut W,
 ) -> Result<(), WKBWriteError> {
@@ -225,7 +226,7 @@ fn read_many_points<I: Read>(mut wkb: I) -> Result<Vec<Coordinate<f64>>, WKBRead
     Ok(res)
 }
 
-fn write_many_points<W: Write, T: Into<f64> + Float>(
+fn write_many_points<W: Write, T: Into<f64> + Float + Debug>(
     mp: &[Coordinate<T>],
     mut out: &mut W,
 ) -> Result<(), WKBWriteError> {
@@ -238,7 +239,7 @@ fn write_many_points<W: Write, T: Into<f64> + Float>(
 }
 
 /// Convert a Geometry into WKB bytes.
-pub fn geom_to_wkb<T: Into<f64> + Float>(geom: &Geometry<T>) -> Result<Vec<u8>, WKBWriteError> {
+pub fn geom_to_wkb<T: Into<f64> + Float + Debug>(geom: &Geometry<T>) -> Result<Vec<u8>, WKBWriteError> {
     let mut result: Vec<u8> = Vec::new();
     write_geom_to_wkb(geom, &mut result)?;
     Ok(result)
@@ -249,7 +250,7 @@ pub fn write_geom_to_wkb<W, T>(
     geom: &Geometry<T>,
     mut result: &mut W,
 ) -> Result<(), WKBWriteError>
-    where T: Into<f64>+Float,
+    where T: Into<f64>+Float+Debug,
           W: Write + ?Sized,
 {
     // FIXME replace type signature with Into<Geometry<T>>
