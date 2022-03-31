@@ -455,71 +455,37 @@ pub fn geom_to_wkb<T: Into<f64> + Float + Debug>(geom: &Geometry<T>) -> Result<V
 /// Write a geometry to the underlying writer, except for the endianity byte.
 pub fn write_geom_to_wkb<W, T>(
     geom: &Geometry<T>,
-    mut result: &mut W,
+    result: &mut W,
 ) -> Result<(), WKBWriteError>
     where T: Into<f64>+Float+Debug,
           W: Write + ?Sized,
 {
     // FIXME replace type signature with Into<Geometry<T>>
-    result.write(LITTLE_ENDIAN)?;
     match geom {
         &Geometry::Point(p) => {
-            result.write_all(&1_u32.to_le_bytes())?;
-            write_point(&p.0, &mut result)?;
+            p.write_as_wkb(result)?;
         }
         &Geometry::LineString(ref ls) => {
-            result.write_all(&2_u32.to_le_bytes())?;
-            write_many_points(&ls.0, &mut result)?;
+            ls.write_as_wkb(result)?;
         }
         &Geometry::Line(ref l) => {
-            write_many_points(&[l.start, l.end], &mut result)?;
+            result.write(LITTLE_ENDIAN)?;
+            write_many_points(&[l.start, l.end], result)?;
         }
         &Geometry::Polygon(ref p) => {
-            result.write_all(&(3_u32).to_le_bytes())?;
-            result.write_all(&(1 + p.interiors().len() as u32).to_le_bytes())?;
-            write_many_points(&p.exterior().0, &mut result)?;
-            for i in p.interiors().iter() {
-                write_many_points(&i.0, &mut result)?;
-            }
+            p.write_as_wkb(result)?;
         }
         &Geometry::MultiPoint(ref mp) => {
-            result.write_all(&(4_u32).to_le_bytes())?;
-            write_many_points(
-                &mp.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(),
-                &mut result,
-            )?;
+            mp.write_as_wkb(result)?;
         }
         &Geometry::MultiLineString(ref mls) => {
-            result.write_all(&(5_u32).to_le_bytes())?;
-            result.write_all(&(mls.0.len() as u32).to_le_bytes())?;
-            for ls in mls.0.iter() {
-                // I tried to have this call write_geom_to_wkb again, but I couldn't get the types
-                // working.
-                result.write(LITTLE_ENDIAN)?;
-                result.write_all(&(2_u32).to_le_bytes())?;
-                write_many_points(&ls.0, &mut result)?;
-            }
+            mls.write_as_wkb(result)?;
         }
         &Geometry::MultiPolygon(ref mp) => {
-            result.write_all(&(6_u32).to_le_bytes())?;
-            result.write_all(&(mp.0.len() as u32).to_le_bytes())?;
-            for poly in mp.0.iter() {
-                result.write(LITTLE_ENDIAN)?;
-                result.write_all(&(3_u32).to_le_bytes())?;
-                result.write_all(&(1 + poly.interiors().len() as u32).to_le_bytes())?;
-
-                write_many_points(&poly.exterior().0, &mut result)?;
-                for int in poly.interiors().iter() {
-                    write_many_points(&int.0, &mut result)?;
-                }
-            }
+            mp.write_as_wkb(result)?;
         }
         &Geometry::GeometryCollection(ref gc) => {
-            result.write_all(&(7_u32).to_le_bytes())?;
-            result.write_all(&(gc.len() as u32).to_le_bytes())?;
-            for geom in gc.0.iter() {
-                write_geom_to_wkb(geom, result)?;
-            }
+            gc.write_as_wkb(result)?;
         }
         &Geometry::Rect(ref _rect) => {
             return Err(WKBWriteError::UnsupportedGeoTypeRect);
