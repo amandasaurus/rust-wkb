@@ -62,6 +62,8 @@ use std::io::prelude::*;
 use geo_types::*;
 use num_traits::Float;
 
+const LITTLE_ENDIAN: &[u8] = &[1];
+
 /// Extension trait for `Read`
 pub trait WKBReadExt {
     /// Attempt to read a Geometry<f64> from this reader
@@ -209,7 +211,7 @@ impl<T> WKBSerializable for Point<T> where T: Into<f64> + Float + Debug
     #[inline]
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
     {
-        w.write(&[1])?;
+        w.write(LITTLE_ENDIAN)?;
         w.write_all(&1_u32.to_le_bytes())?;
         write_point(&self.0, w)
     }
@@ -230,7 +232,7 @@ impl<T> WKBSerializable for LineString<T> where T: Into<f64> + Float + Debug
     #[inline]
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
     {
-        w.write(&[1])?;
+        w.write(LITTLE_ENDIAN)?;
         w.write_all(&2_u32.to_le_bytes())?;
         write_many_points(&self.0, w)
     }
@@ -250,7 +252,7 @@ impl<T> WKBSerializable for Polygon<T> where T: Into<f64> + Float + Debug
 {
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
     {
-        w.write(&[1])?;
+        w.write(LITTLE_ENDIAN)?;
         w.write_all(&(3_u32).to_le_bytes())?;
         w.write_all(&(1 + self.interiors().len() as u32).to_le_bytes())?;
         write_many_points(&self.exterior().0, w)?;
@@ -275,7 +277,7 @@ impl<T> WKBSerializable for MultiPoint<T> where T: Into<f64> + Float + Debug
 {
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
     {
-        w.write(&[1])?;
+        w.write(LITTLE_ENDIAN)?;
         w.write_all(&(4_u32).to_le_bytes())?;
         write_many_points(
             &self.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(),
@@ -298,7 +300,7 @@ impl<T> WKBSerializable for MultiLineString<T> where T: Into<f64> + Float + Debu
 {
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
     {
-        w.write(&[1])?;
+        w.write(LITTLE_ENDIAN)?;
         w.write_all(&(5_u32).to_le_bytes())?;
         w.write_all(&(self.0.len() as u32).to_le_bytes())?;
         for ls in self.0.iter() {
@@ -459,8 +461,7 @@ pub fn write_geom_to_wkb<W, T>(
           W: Write + ?Sized,
 {
     // FIXME replace type signature with Into<Geometry<T>>
-    // little endian
-    result.write(&[1])?;
+    result.write(LITTLE_ENDIAN)?;
     match geom {
         &Geometry::Point(p) => {
             result.write_all(&1_u32.to_le_bytes())?;
@@ -494,7 +495,7 @@ pub fn write_geom_to_wkb<W, T>(
             for ls in mls.0.iter() {
                 // I tried to have this call write_geom_to_wkb again, but I couldn't get the types
                 // working.
-                result.write(&[1])?;
+                result.write(LITTLE_ENDIAN)?;
                 result.write_all(&(2_u32).to_le_bytes())?;
                 write_many_points(&ls.0, &mut result)?;
             }
@@ -503,7 +504,7 @@ pub fn write_geom_to_wkb<W, T>(
             result.write_all(&(6_u32).to_le_bytes())?;
             result.write_all(&(mp.0.len() as u32).to_le_bytes())?;
             for poly in mp.0.iter() {
-                result.write(&[1])?;
+                result.write(LITTLE_ENDIAN)?;
                 result.write_all(&(3_u32).to_le_bytes())?;
                 result.write_all(&(1 + poly.interiors().len() as u32).to_le_bytes())?;
 
@@ -650,7 +651,7 @@ mod tests {
     #[test]
     fn wkb_to_point() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(100f64).to_le_bytes()).unwrap();
         bytes.write_all(&(-2f64).to_le_bytes()).unwrap();
@@ -696,7 +697,7 @@ mod tests {
     #[test]
     fn wkb_to_linestring() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
 
         bytes.write_all(&(2_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(2_u32).to_le_bytes()).unwrap();
@@ -760,7 +761,7 @@ mod tests {
     #[test]
     fn wkb_to_polygon() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
         bytes.write_all(&(3_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(4_u32).to_le_bytes()).unwrap();
@@ -792,7 +793,7 @@ mod tests {
     #[test]
     fn wkb_to_polygon_auto_closed() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
         bytes.write_all(&(3_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
 
@@ -848,7 +849,7 @@ mod tests {
     #[test]
     fn wkb_to_multipoint() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
         bytes.write_all(&(4_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         write_two_f64(&mut bytes, 100, -2);
@@ -902,11 +903,11 @@ mod tests {
     #[test]
     fn wkb_to_multilinestring() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
         bytes.write_all(&(5_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
 
-        bytes.write(&[1]).unwrap();
+        bytes.write(LITTLE_ENDIAN).unwrap();
         bytes.write_all(&(2_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(3_u32).to_le_bytes()).unwrap();
         write_two_f64(&mut bytes, 0, 0);
