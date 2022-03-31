@@ -113,6 +113,58 @@ impl From<io::Error> for WKBReadError {
     }
 }
 
+/// A thing (`Geometry`) that can be written as WKB
+///
+/// ```rust
+/// # extern crate geo_types;
+/// # extern crate wkb;
+/// # fn main() {
+/// use geo_types::*;
+/// use wkb::*;
+/// let p: Geometry<f64> = Geometry::Point(Point::new(2., 4.));
+/// let mut bytes = Vec::new();
+/// p.write_as_wkb(&mut bytes).unwrap();
+/// assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
+///
+/// let p2 = Point::new(2., 4.);
+/// let mut bytes = Vec::new();
+/// p2.write_as_wkb(&mut bytes).unwrap();
+/// assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
+/// # }
+/// ```
+pub trait WKBSerializable {
+    /// Attempt to write self as WKB to a `Write`.
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>;
+
+    /// Return self as WKB bytes
+    fn as_wkb_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        self.write_as_wkb(&mut bytes).unwrap();
+        bytes
+    }
+}
+
+/// A thing (`Geometry`) that can be read as WKB
+///
+/// ```rust
+/// # extern crate geo_types;
+/// # extern crate wkb;
+/// # fn main() {
+/// use geo_types::*;
+/// use wkb::*;
+/// let bytes: Vec<u8> = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64];
+/// let p: Geometry<f64> = Geometry::read_from_wkb(&mut &*bytes).unwrap();
+/// assert_eq!(p, Geometry::Point(Point::new(2., 4.)));
+///
+/// let p2: Point<f64> = Point::read_from_wkb(&mut &*bytes).unwrap();
+/// assert_eq!(p2, Point::new(2., 4.));
+/// # }
+/// ```
+pub trait WKBUnserializable {
+    /// Attempt to read an instance of self from this `Read`.
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError> where Self: Sized;
+}
+
 /// A thing (`Geometry`) that can be read or written as WKB
 ///
 /// ```rust
@@ -132,32 +184,185 @@ impl From<io::Error> for WKBReadError {
 /// //assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
 /// # }
 /// ```
-pub trait WKBAbleExt {
-    /// Attempt to write self as WKB to a `Write`.
-    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>;
+pub trait WKBAbleExt: WKBSerializable + WKBUnserializable {}
 
-    /// Return self as WKB bytes
-    fn as_wkb_bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        self.write_as_wkb(&mut bytes).unwrap();
-        bytes
-    }
+impl<T> WKBAbleExt for T where T: ?Sized + WKBSerializable + WKBUnserializable {}
 
-    /// Attempt to read an instance of self from this `Read`.
-    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError> where Self: Sized;
-}
-
-impl WKBAbleExt for Geometry<f64>
+impl<T> WKBSerializable for Geometry<T> where T: Into<f64> + Float + Debug
 {
     fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
     {
         write_geom_to_wkb(self, w)
     }
+}
 
-
+impl WKBUnserializable for Geometry<f64>
+{
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         wkb_to_geom(r)
+    }
+}
+
+impl<T> WKBSerializable for Point<T> where T: Into<f64> + Float + Debug
+{
+    #[inline]
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(&[1])?;
+        w.write_all(&1_u32.to_le_bytes())?;
+        write_point(&self.0, w)
+    }
+}
+
+impl WKBUnserializable for Point<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::Point(p) => Ok(p),
+            _ => Err(WKBReadError::WrongType)
+        }
+    }
+}
+
+impl<T> WKBSerializable for LineString<T> where T: Into<f64> + Float + Debug
+{
+    #[inline]
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(&[1])?;
+        w.write_all(&2_u32.to_le_bytes())?;
+        write_many_points(&self.0, w)
+    }
+}
+
+impl WKBUnserializable for LineString<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::LineString(l) => Ok(l),
+            _ => Err(WKBReadError::WrongType)
+        }
+    }
+}
+
+impl<T> WKBSerializable for Polygon<T> where T: Into<f64> + Float + Debug
+{
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(&[1])?;
+        w.write_all(&(3_u32).to_le_bytes())?;
+        w.write_all(&(1 + self.interiors().len() as u32).to_le_bytes())?;
+        write_many_points(&self.exterior().0, w)?;
+        for i in self.interiors().iter() {
+            write_many_points(&i.0, w)?;
+        }
+        Ok(())
+    }
+}
+
+impl WKBUnserializable for Polygon<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::Polygon(p) => Ok(p),
+            _ => Err(WKBReadError::WrongType)
+        }
+    }
+}
+
+impl<T> WKBSerializable for MultiPoint<T> where T: Into<f64> + Float + Debug
+{
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(&[1])?;
+        w.write_all(&(4_u32).to_le_bytes())?;
+        write_many_points(
+            &self.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(),
+            w,
+        )
+    }
+}
+
+impl WKBUnserializable for MultiPoint<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::MultiPoint(mp) => Ok(mp),
+            _ => Err(WKBReadError::WrongType)
+        }
+    }
+}
+
+impl<T> WKBSerializable for MultiLineString<T> where T: Into<f64> + Float + Debug
+{
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(&[1])?;
+        w.write_all(&(5_u32).to_le_bytes())?;
+        w.write_all(&(self.0.len() as u32).to_le_bytes())?;
+        for ls in self.0.iter() {
+            ls.write_as_wkb(w)?
+        }
+        Ok(())
+    }
+}
+
+impl WKBUnserializable for MultiLineString<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::MultiLineString(ml) => Ok(ml),
+            _ => Err(WKBReadError::WrongType)
+        }
+    }
+}
+
+impl<T> WKBSerializable for MultiPolygon<T> where T: Into<f64> + Float + Debug
+{
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(LITTLE_ENDIAN)?;
+        w.write_all(&(6_u32).to_le_bytes())?;
+        w.write_all(&(self.0.len() as u32).to_le_bytes())?;
+        for poly in self.0.iter() {
+            poly.write_as_wkb(w)?
+        }
+        Ok(())
+    }
+}
+
+impl WKBUnserializable for MultiPolygon<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::MultiPolygon(mp) => Ok(mp),
+            _ => Err(WKBReadError::WrongType)
+        }
+    }
+}
+
+impl<T> WKBSerializable for GeometryCollection<T> where T: Into<f64> + Float + Debug
+{
+    fn write_as_wkb(&self, w: &mut impl Write) -> Result<(), WKBWriteError>
+    {
+        w.write(LITTLE_ENDIAN)?;
+        w.write_all(&(7_u32).to_le_bytes())?;
+        w.write_all(&(self.len() as u32).to_le_bytes())?;
+        for geom in self.0.iter() {
+            write_geom_to_wkb(geom, w)?;
+        }
+        Ok(())
+    }
+}
+
+impl WKBUnserializable for GeometryCollection<f64> {
+    fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
+    {
+        match wkb_to_geom(r)? {
+            Geometry::GeometryCollection(gc) => Ok(gc),
+            _ => Err(WKBReadError::WrongType)
+        }
     }
 }
 
