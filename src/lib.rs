@@ -162,7 +162,7 @@ pub trait WKBSerializable {
 /// assert_eq!(p2, Point::new(2., 4.));
 /// # }
 /// ```
-pub trait WKBUnserializable {
+pub trait WKBDeserializable {
     /// Attempt to read an instance of self from this `Read`.
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError> where Self: Sized;
 }
@@ -186,9 +186,9 @@ pub trait WKBUnserializable {
 /// //assert_eq!(bytes, vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 16, 64]);
 /// # }
 /// ```
-pub trait WKBAbleExt: WKBSerializable + WKBUnserializable {}
+pub trait WKBAbleExt: WKBSerializable + WKBDeserializable {}
 
-impl<T> WKBAbleExt for T where T: ?Sized + WKBSerializable + WKBUnserializable {}
+impl<T> WKBAbleExt for T where T: ?Sized + WKBSerializable + WKBDeserializable {}
 
 impl<T> WKBSerializable for Geometry<T> where T: Into<f64> + Float + Debug
 {
@@ -198,7 +198,7 @@ impl<T> WKBSerializable for Geometry<T> where T: Into<f64> + Float + Debug
     }
 }
 
-impl WKBUnserializable for Geometry<f64>
+impl WKBDeserializable for Geometry<f64>
 {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
@@ -217,7 +217,7 @@ impl<T> WKBSerializable for Point<T> where T: Into<f64> + Float + Debug
     }
 }
 
-impl WKBUnserializable for Point<f64> {
+impl WKBDeserializable for Point<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
@@ -238,7 +238,7 @@ impl<T> WKBSerializable for LineString<T> where T: Into<f64> + Float + Debug
     }
 }
 
-impl WKBUnserializable for LineString<f64> {
+impl WKBDeserializable for LineString<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
@@ -263,7 +263,7 @@ impl<T> WKBSerializable for Polygon<T> where T: Into<f64> + Float + Debug
     }
 }
 
-impl WKBUnserializable for Polygon<f64> {
+impl WKBDeserializable for Polygon<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
@@ -286,7 +286,7 @@ impl<T> WKBSerializable for MultiPoint<T> where T: Into<f64> + Float + Debug
     }
 }
 
-impl WKBUnserializable for MultiPoint<f64> {
+impl WKBDeserializable for MultiPoint<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
@@ -310,7 +310,7 @@ impl<T> WKBSerializable for MultiLineString<T> where T: Into<f64> + Float + Debu
     }
 }
 
-impl WKBUnserializable for MultiLineString<f64> {
+impl WKBDeserializable for MultiLineString<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
@@ -334,7 +334,7 @@ impl<T> WKBSerializable for MultiPolygon<T> where T: Into<f64> + Float + Debug
     }
 }
 
-impl WKBUnserializable for MultiPolygon<f64> {
+impl WKBDeserializable for MultiPolygon<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
@@ -358,7 +358,7 @@ impl<T> WKBSerializable for GeometryCollection<T> where T: Into<f64> + Float + D
     }
 }
 
-impl WKBUnserializable for GeometryCollection<f64> {
+impl WKBDeserializable for GeometryCollection<f64> {
     fn read_from_wkb(r: &mut impl Read) -> Result<Self, WKBReadError>
     {
         match wkb_to_geom(r)? {
