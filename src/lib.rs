@@ -94,7 +94,7 @@ impl<W: Write> WKBWriteExt for W {
     }
 }
 
-/// An error occured when reading
+/// An error occurred when reading
 #[derive(Debug)]
 pub enum WKBReadError {
     /// This WKB is in BigEndian format, which this library does not yet support.
@@ -161,7 +161,7 @@ impl WKBAbleExt for Geometry<f64>
     }
 }
 
-/// An error occured when writing
+/// An error occurred when writing
 #[derive(Debug)]
 pub enum WKBWriteError {
     /// Geometry is a `geo_types::Rect`, which this library does not yet support
@@ -245,7 +245,7 @@ pub fn geom_to_wkb<T: Into<f64> + Float + Debug>(geom: &Geometry<T>) -> Result<V
     Ok(result)
 }
 
-/// Write a geometry to the underlying writer, except for the endianity byte.
+/// Write a geometry to the underlying writer
 pub fn write_geom_to_wkb<W, T>(
     geom: &Geometry<T>,
     mut result: &mut W,
@@ -255,20 +255,20 @@ pub fn write_geom_to_wkb<W, T>(
 {
     // FIXME replace type signature with Into<Geometry<T>>
     // little endian
-    result.write(&[1])?;
-    match geom {
-        &Geometry::Point(p) => {
+    result.write_all(&[1])?;
+    match *geom {
+        Geometry::Point(p) => {
             result.write_all(&1_u32.to_le_bytes())?;
             write_point(&p.0, &mut result)?;
         }
-        &Geometry::LineString(ref ls) => {
+        Geometry::LineString(ref ls) => {
             result.write_all(&2_u32.to_le_bytes())?;
             write_many_points(&ls.0, &mut result)?;
         }
-        &Geometry::Line(ref l) => {
+        Geometry::Line(ref l) => {
             write_many_points(&[l.start, l.end], &mut result)?;
         }
-        &Geometry::Polygon(ref p) => {
+        Geometry::Polygon(ref p) => {
             result.write_all(&(3_u32).to_le_bytes())?;
             result.write_all(&(1 + p.interiors().len() as u32).to_le_bytes())?;
             write_many_points(&p.exterior().0, &mut result)?;
@@ -276,29 +276,31 @@ pub fn write_geom_to_wkb<W, T>(
                 write_many_points(&i.0, &mut result)?;
             }
         }
-        &Geometry::MultiPoint(ref mp) => {
+        Geometry::MultiPoint(ref mp) => {
             result.write_all(&(4_u32).to_le_bytes())?;
-            write_many_points(
-                &mp.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(),
-                &mut result,
-            )?;
+            result.write_all(&(mp.0.len() as u32).to_le_bytes())?;
+            for p in mp.0.iter() {
+                result.write_all(&[1])?;
+                result.write_all(&1_u32.to_le_bytes())?;
+                write_point(&p.0, &mut result)?;
+            }
         }
-        &Geometry::MultiLineString(ref mls) => {
+        Geometry::MultiLineString(ref mls) => {
             result.write_all(&(5_u32).to_le_bytes())?;
             result.write_all(&(mls.0.len() as u32).to_le_bytes())?;
             for ls in mls.0.iter() {
                 // I tried to have this call write_geom_to_wkb again, but I couldn't get the types
                 // working.
-                result.write(&[1])?;
+                result.write_all(&[1])?;
                 result.write_all(&(2_u32).to_le_bytes())?;
                 write_many_points(&ls.0, &mut result)?;
             }
         }
-        &Geometry::MultiPolygon(ref mp) => {
+        Geometry::MultiPolygon(ref mp) => {
             result.write_all(&(6_u32).to_le_bytes())?;
             result.write_all(&(mp.0.len() as u32).to_le_bytes())?;
             for poly in mp.0.iter() {
-                result.write(&[1])?;
+                result.write_all(&[1])?;
                 result.write_all(&(3_u32).to_le_bytes())?;
                 result.write_all(&(1 + poly.interiors().len() as u32).to_le_bytes())?;
 
@@ -308,17 +310,17 @@ pub fn write_geom_to_wkb<W, T>(
                 }
             }
         }
-        &Geometry::GeometryCollection(ref gc) => {
+        Geometry::GeometryCollection(ref gc) => {
             result.write_all(&(7_u32).to_le_bytes())?;
             result.write_all(&(gc.len() as u32).to_le_bytes())?;
             for geom in gc.0.iter() {
                 write_geom_to_wkb(geom, result)?;
             }
         }
-        &Geometry::Rect(ref _rect) => {
+        Geometry::Rect(ref _rect) => {
             return Err(WKBWriteError::UnsupportedGeoTypeRect);
         }
-        &Geometry::Triangle(ref _t) => {
+        Geometry::Triangle(ref _t) => {
             return Err(WKBWriteError::UnsupportedGeoTypeTriangle);
         }
     }
@@ -363,10 +365,19 @@ pub fn wkb_to_geom<R>(mut wkb: &mut R) -> Result<Geometry<f64>, WKBReadError>
         }
         4 => {
             // MultiPoint
-            let points = read_many_points(&mut wkb)?;
-            Ok(Geometry::MultiPoint(MultiPoint(
-                points.into_iter().map(Point).collect::<Vec<Point<f64>>>(),
-            )))
+            let num_points = read_u32(&mut wkb)? as usize;
+            let mut points = Vec::with_capacity(num_points);
+            for _ in 0..num_points {
+                let point: Point<f64> = match wkb_to_geom(wkb)? {
+                    Geometry::Point(p) => p,
+                    _ => {
+                        return Err(WKBReadError::WrongType);
+                    }
+                };
+
+                points.push(point);
+            }
+            Ok(Geometry::MultiPoint(MultiPoint(points)))
         }
         5 => {
             // MultiLineString
@@ -445,7 +456,7 @@ mod tests {
     #[test]
     fn wkb_to_point() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(100f64).to_le_bytes()).unwrap();
         bytes.write_all(&(-2f64).to_le_bytes()).unwrap();
@@ -456,7 +467,7 @@ mod tests {
             assert_eq!(p.x(), 100.);
             assert_eq!(p.y(), -2.);
         } else {
-            assert!(false);
+            unreachable!();
         }
 
         assert_eq!(
@@ -491,7 +502,7 @@ mod tests {
     #[test]
     fn wkb_to_linestring() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
 
         bytes.write_all(&(2_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(2_u32).to_le_bytes()).unwrap();
@@ -507,7 +518,7 @@ mod tests {
             assert_eq!(ls.0[1].x, 1000.);
             assert_eq!(ls.0[1].y, 1000.);
         } else {
-            assert!(false);
+            unreachable!();
         }
 
         assert_eq!(
@@ -555,7 +566,7 @@ mod tests {
     #[test]
     fn wkb_to_polygon() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(3_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(4_u32).to_le_bytes()).unwrap();
@@ -575,7 +586,7 @@ mod tests {
             assert_eq!(p.exterior().0[2], (0., 1.).into());
             assert_eq!(p.exterior().0[3], (0., 0.).into());
         } else {
-            assert!(false);
+            unreachable!();
         }
 
         assert_eq!(
@@ -587,7 +598,7 @@ mod tests {
     #[test]
     fn wkb_to_polygon_auto_closed() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(3_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
 
@@ -612,7 +623,7 @@ mod tests {
             assert_eq!(p.exterior().0[3], (0., 0.).into());
             assert_eq!(p.exterior().0.len(), 4);
         } else {
-            assert!(false);
+            unreachable!();
         }
 
         // They won't equal
@@ -631,7 +642,13 @@ mod tests {
         assert_eq!(read_u8(&mut res).unwrap(), 1);
         assert_eq!(read_u32(&mut res).unwrap(), 4);
         assert_eq!(read_u32(&mut res).unwrap(), 2);
+        // the first point
+        assert_eq!(read_u8(&mut res).unwrap(), 1);
+        assert_eq!(read_u32(&mut res).unwrap(), 1);
         assert_two_f64(&mut res, 0, 0);
+        // the second point
+        assert_eq!(read_u8(&mut res).unwrap(), 1);
+        assert_eq!(read_u32(&mut res).unwrap(), 1);
         assert_two_f64(&mut res, 10, -2);
 
         assert_eq!(
@@ -643,8 +660,10 @@ mod tests {
     #[test]
     fn wkb_to_multipoint() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(4_u32).to_le_bytes()).unwrap();
+        bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         write_two_f64(&mut bytes, 100, -2);
 
@@ -654,7 +673,7 @@ mod tests {
             assert_eq!(mp.0[0].x(), 100.);
             assert_eq!(mp.0[0].y(), -2.);
         } else {
-            assert!(false);
+            unreachable!();
         }
 
         assert_eq!(
@@ -697,11 +716,11 @@ mod tests {
     #[test]
     fn wkb_to_multilinestring() {
         let mut bytes = Vec::new();
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(5_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
 
-        bytes.write(&[1]).unwrap();
+        bytes.write_all(&[1]).unwrap();
         bytes.write_all(&(2_u32).to_le_bytes()).unwrap();
         bytes.write_all(&(3_u32).to_le_bytes()).unwrap();
         write_two_f64(&mut bytes, 0, 0);
@@ -716,7 +735,7 @@ mod tests {
             assert_eq!(mls.0[0].0[1].x_y(), (1., 0.));
             assert_eq!(mls.0[0].0[2].x_y(), (0., 1.));
         } else {
-            assert!(false);
+            unreachable!();
         }
 
         assert_eq!(
@@ -806,7 +825,7 @@ mod tests {
             assert_eq!(mp.0[1].exterior().0[0].x_y(), (2., 2.));
             assert_eq!(mp.0[1].interiors().len(), 0);
         } else {
-            assert!(false);
+            unreachable!();
         }
     }
 
@@ -870,7 +889,7 @@ mod tests {
     #[test]
     fn bigendian_not_supported() {
         let mut bytes = Vec::new();
-        bytes.write(&[0]).unwrap();
+        bytes.write_all(&[0]).unwrap();
         bytes.write_all(&1_u32.to_be_bytes()).unwrap();
         let res = wkb_to_geom(&mut bytes.as_slice());
         assert!(res.is_err());
