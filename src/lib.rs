@@ -278,10 +278,12 @@ pub fn write_geom_to_wkb<W, T>(
         }
         &Geometry::MultiPoint(ref mp) => {
             result.write_all(&(4_u32).to_le_bytes())?;
-            write_many_points(
-                &mp.0.iter().map(|p| p.0).collect::<Vec<Coordinate<T>>>(),
-                &mut result,
-            )?;
+            result.write_all(&(mp.0.len() as u32).to_le_bytes())?;
+            for p in mp.0.iter() {
+                result.write(&[1])?;
+                result.write_all(&1_u32.to_le_bytes())?;
+                write_point(&p.0, &mut result)?;
+            }
         }
         &Geometry::MultiLineString(ref mls) => {
             result.write_all(&(5_u32).to_le_bytes())?;
@@ -363,10 +365,19 @@ pub fn wkb_to_geom<R>(mut wkb: &mut R) -> Result<Geometry<f64>, WKBReadError>
         }
         4 => {
             // MultiPoint
-            let points = read_many_points(&mut wkb)?;
-            Ok(Geometry::MultiPoint(MultiPoint(
-                points.into_iter().map(Point).collect::<Vec<Point<f64>>>(),
-            )))
+            let num_points = read_u32(&mut wkb)? as usize;
+            let mut points = Vec::with_capacity(num_points);
+            for _ in 0..num_points {
+                let point: Point<f64> = match wkb_to_geom(wkb)? {
+                    Geometry::Point(p) => p,
+                    _ => {
+                        return Err(WKBReadError::WrongType);
+                    }
+                };
+
+                points.push(point);
+            }
+            Ok(Geometry::MultiPoint(MultiPoint(points)))
         }
         5 => {
             // MultiLineString
@@ -631,7 +642,13 @@ mod tests {
         assert_eq!(read_u8(&mut res).unwrap(), 1);
         assert_eq!(read_u32(&mut res).unwrap(), 4);
         assert_eq!(read_u32(&mut res).unwrap(), 2);
+        // the first point
+        assert_eq!(read_u8(&mut res).unwrap(), 1);
+        assert_eq!(read_u32(&mut res).unwrap(), 1);
         assert_two_f64(&mut res, 0, 0);
+        // the second point
+        assert_eq!(read_u8(&mut res).unwrap(), 1);
+        assert_eq!(read_u32(&mut res).unwrap(), 1);
         assert_two_f64(&mut res, 10, -2);
 
         assert_eq!(
@@ -645,6 +662,8 @@ mod tests {
         let mut bytes = Vec::new();
         bytes.write(&[1]).unwrap();
         bytes.write_all(&(4_u32).to_le_bytes()).unwrap();
+        bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
+        bytes.write(&[1]).unwrap();
         bytes.write_all(&(1_u32).to_le_bytes()).unwrap();
         write_two_f64(&mut bytes, 100, -2);
 
